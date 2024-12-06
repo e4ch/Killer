@@ -152,13 +152,13 @@ void deObfuscate(char* cApi, int nSize)
 
 void banner() {
 	printf("\n");
-	printf(RED"   	        	dP     dP dP dP        dP         88888888b  888888ba    \n");
-	printf(RED"			88.d8' 88 88        88         88         88    `8b		 \n");
-	printf(RED"			88aaa8P'  88 88        88        a88aaaa    a88aaaa8P'   \n");
-	printf(RED"			88   `8b. 88 88        88         88         88   `8b.   \n");
-	printf(RED"			88     88 88 88        88         88         88     88   \n");
-	printf(RED"			dP     dP dP 88888888P 88888888P  88888888P  dP     dP   \n");
-	printf(GREEN"			     Author => Hossam Ehab / EDR/AV evasion tool\n");
+	printf(RED"\t\t\tdP     dP dP dP        dP         88888888b  888888ba    \n");
+	printf(RED"\t\t\t88    d8' 88 88        88         88         88    `8b   \n");
+	printf(RED"\t\t\t88aaa8P'  88 88        88         a88aaaa    a88aaaa8P'  \n");
+	printf(RED"\t\t\t88   `8b. 88 88        88         88         88   `8b.   \n");
+	printf(RED"\t\t\t88     88 88 88        88         88         88     88   \n");
+	printf(RED"\t\t\tdP     dP dP 88888888P 88888888P  88888888P  dP     dP   \n");
+	printf(GREEN"\t\t\t     Author => Hossam Ehab / EDR/AV evasion tool\n");
 	printf("\n");
 }
 
